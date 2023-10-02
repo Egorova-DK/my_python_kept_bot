@@ -14,8 +14,9 @@ class Raffle(Base):
 
     name = Column(String)
     users_count = Column(Integer)
-    finish_date = Column(Date)
+    finish_date = Column(DateTime)
     description = Column(String)
+    is_active = Column(Boolean, default=False)
     media_url = Column(String, nullable=True)
     id = Column(Integer, primary_key=True, autoincrement=True)
     users = relationship("User", back_populates="raffle")
@@ -76,6 +77,7 @@ class Database:
                 saved.description = raffle.description
                 saved.users_count = raffle.users_count
                 saved.finish_date = raffle.finish_date
+                saved.is_active = raffle.is_active
                 self.session.merge(saved)
                 self.session.commit()
         except Exception as ex:
@@ -84,7 +86,8 @@ class Database:
 
     def delete_raffle(self, raffle_id: int):
         try:
-            self.session.query(Raffle).filter(Raffle.id == raffle_id).delete()
+            s = self.session.query(Raffle).filter_by(id=raffle_id).one()
+            self.session.delete(s)
             self.session.commit()
         except Exception as ex:
             logging.exception('There was an exception in delete_raffle')
