@@ -6,7 +6,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
 
 from config import TOKEN_API
-from keyboards import get_kb_menu, cb2, get_ikb_info, get_ikb_edit, get_ikb_menu, cb, get_ikb_media
+from keyboards import get_kb_menu, cb2, get_ikb_info, get_ikb_edit, get_ikb_menu, cb, get_ikb_media, complete_raffles
 from database import Database, Raffle
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -30,6 +30,9 @@ class ProfileStatesGroup(StatesGroup):
     media = State()
     show_raffle = State()
     end = State()
+    edit_name = State()
+    edit_description = State()
+    edit_finish_date = State()
 
 
 async def on_startup(_):
@@ -58,17 +61,7 @@ async def menu_to_handler(callback: types.CallbackQuery):
 @dp.message_handler(commands=['raffles'], state='*')
 @dp.message_handler(text=['Розыгрыши'], state='*')
 async def cmd_show_raffles(message: types.Message) -> None:
-    header = 'Список созданных Вами розыгрышей:\n'
-    s = ''
-    show_keyboard = InlineKeyboardMarkup(row_width=2)
-    with db:
-        for r in db.get_raffles():
-            m = f'Название розыгрыша:<b>{r.name}</b>\n' \
-                f'{r.description}\n' \
-                f'Количество участников:<b>{r.users_count}</b>\n'
-            show_keyboard.add(InlineKeyboardButton(f'{r.name}', callback_data=f'show_raffle_{r.id}'))
-            s += m
-    await message.answer(header + s, parse_mode='HTML', reply_markup=show_keyboard)
+    await show_raffles(message.from_user.id)
     await ProfileStatesGroup.raffles.set()
 
 
@@ -83,31 +76,21 @@ async def edit_raffle(callback: types.CallbackQuery):
 
 
 
-@dp.callback_query_handler(text_startswith='delete_', state='*')
+@dp.callback_query_handler(text_startswith='delete_', state=ProfileStatesGroup.show_raffle)
 async def delete_raffle(callback: types.CallbackQuery):
     await callback.message.delete()
     id = int(callback.data.split('_')[-1])
     with db:
         db.delete_raffle(id)
     await bot.send_message(chat_id=callback.from_user.id, text='<b>Ваш розыгрыш удален</b>', parse_mode='HTML')
+    await show_raffles(chat_id=callback.from_user.id)
 
 
 
 @dp.callback_query_handler(text = 'raffles', state=ProfileStatesGroup.show_raffle)
 async def cmd_show_raffles(callback: types.CallbackQuery) -> None:
     await callback.message.delete()
-    header = 'Список созданных Вами розыгрышей:\n'
-    s = ''
-    show_keyboard = InlineKeyboardMarkup(row_width=2)
-    with db:
-        for r in db.get_raffles():
-            m = f'Название розыгрыша:<b>{r.name}</b>\n' \
-                f'{r.description}\n' \
-                f'Количество участников:<b>{r.users_count}</b>\n'
-            show_keyboard.add(InlineKeyboardButton(f'{r.name}', callback_data=f'show_raffle_{r.id}'))
-            s += m
-    await bot.send_message(chat_id=callback.from_user.id, text=f'{header} + {s}', parse_mode='HTML',
-                           reply_markup=show_keyboard)
+    await show_raffles(chat_id=callback.from_user.id)
     await ProfileStatesGroup.raffles.set()
 
 
@@ -115,54 +98,167 @@ async def cmd_show_raffles(callback: types.CallbackQuery) -> None:
 async def show_raffle(callback: types.CallbackQuery):
     await callback.message.delete()
     id = callback.data.split('_')[-1]
+    await show_raffle_id(id, chat_id= callback.from_user.id)
+
+
+@dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='run_')
+async def run_raffle(callback: types.CallbackQuery):
+    await callback.message.edit_reply_markup()
+    id = callback.data.split('_')[-1]
     with db:
         r = db.get_raffles(id)
-        m = f'Название розыгрыша:<b>{r.name}</b>\n' \
+        if r.finish_date <= datetime.now():
+            await bot.send_message(chat_id=callback.from_user.id, text='<b>Нельзя запустить розыгрыш.</b> Время проведения вышло', parse_mode='HTML')
+        else:
+            r.is_active = True
+            db.update_raffle(r)
+            await bot.send_message(chat_id=callback.from_user.id, text='<b>Ваш розыгрыш запущен!</b>', parse_mode='HTML', reply_markup=complete_raffles())
+        await show_raffle_id(id, chat_id=callback.from_user.id)
+
+
+@dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith = 'complete_')
+async def complete_raffle(callback: types.CallbackQuery):
+    await callback.message.edit_reply_markup()
+    id = callback.data.split('_')[-1]
+    with db:
+        r = db.get_raffles(id)
+        r.is_active = False
+        r.finish_date = datetime.now()
+        db.update_raffle(r)
+        await bot.send_message(chat_id=callback.from_user.id, text='Розыгрыш завершен!')
+
+
+@dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='Name_')
+async def show_edit_name_raffle(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_reply_markup()
+    id = callback.data.split('_')[-1]
+    async with state.proxy() as data:
+        data['edit_name_id'] = id
+    await bot.send_message(chat_id=callback.from_user.id, text='<b>Введите новое название розыгрыша.</b>',
+                           parse_mode='HTML')
+    await ProfileStatesGroup.edit_name.set()
+
+
+
+@dp.message_handler(state=ProfileStatesGroup.edit_name)
+async def edit_name_raffle(message: types.Message, state: FSMContext):
+    if message.text.startswith('/'):
+        await message.answer(
+            "<b>Название не может начинаться с /.</b>\nПопробуйте еще раз",
+            parse_mode="HTML")
+    else:
+        async with state.proxy() as data:
+            id = data['edit_name_id']
+            data['edit_name_id'] = None
+        with db:
+            r = db.get_raffles(id)
+            r.name = message.text
+            db.update_raffle(r)
+        await show_raffle_id(id, chat_id=message.from_user.id)
+
+
+@dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='Discription_')
+async def show_edit_discription_raffle(callback: types.CallbackQuery, state: FSMContext ):
+    await callback.message.edit_reply_markup()
+    id = callback.data.split('_')[-1]
+    async with state.proxy() as data:
+        data['edit_discription_id'] = id
+    await bot.send_message(chat_id=callback.from_user.id, text='<b>Введите новое описание розыгрыша.</b>',
+                           parse_mode='HTML')
+    await ProfileStatesGroup.edit_description.set()
+
+@dp.message_handler(state=ProfileStatesGroup.edit_description)
+async def edit_description_raffle(message: types.Message, state: FSMContext):
+    if message.text.startswith('/'):
+        await message.answer(
+            "<b>Описание не может начинаться с /.</b>\nПопробуйте еще раз",
+            parse_mode="HTML")
+    else:
+        async with state.proxy() as data:
+            id = data['edit_discription_id']
+            data['edit_discription_id'] = None
+        with db:
+            r = db.get_raffles(id)
+            r.description = message.text
+            db.update_raffle(r)
+        await show_raffle_id(id, chat_id=message.from_user.id)
+
+
+@dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='Finish_date_')
+async def show_edit_finish_date_raffle(callback: types.CallbackQuery, state: FSMContext ):
+    await callback.message.edit_reply_markup()
+    id = callback.data.split('_')[-1]
+    async with state.proxy() as data:
+        data['edit_finish_date_id'] = id
+    await bot.send_message(chat_id=callback.from_user.id, text='<b>Введите новую дату окончания розыгрыша</b> в формате (ЧЧ:ММ ДД.ММ.ГГГГ). <b>Например</b>: 12:00 31.12.2023.',
+                           parse_mode='HTML')
+    await ProfileStatesGroup.edit_finish_date.set()
+
+
+@dp.message_handler(state=ProfileStatesGroup.edit_finish_date)
+async def edit_finish_date_raffle(message: types.Message, state: FSMContext):
+    finish_date = string_to_timestamp(message.text)
+    if finish_date is None:
+        await message.answer('Некорректная дата. Попробуйте еще раз.')
+    else:
+        async with state.proxy() as data:
+            id = data['edit_finish_date_id']
+            data['edit_finish_date_id'] = None
+        with db:
+            r = db.get_raffles(id)
+            r.finish_date = finish_date
+            db.update_raffle(r)
+        await show_raffle_id(id, chat_id=message.from_user.id)
+
+
+async def show_raffle_id(id, chat_id):
+    with db:
+        r = db.get_raffles(id)
+        if r.finish_date <= datetime.now():
+            status = 'Завершен'
+        elif r.is_active:
+            status = 'Запущен'
+        else:
+            status = 'Не запущен'
+        m = f'<b>{r.name}</b>\n' \
             f'{r.description}\n' \
-            f'Количество участников:<b>{r.users_count}</b>\n'
+            f'<b>Количество участников:</b> { r.users_count}\n' \
+            f'<b>Дата окончания:</b> {r.finish_date}\n' \
+            f'<b>Статус:</b> {status}'
 
-    await bot.send_message(chat_id=callback.from_user.id, text=m, parse_mode='HTML', reply_markup=get_ikb_info(id))
+
+
+    await bot.send_message(chat_id=chat_id, text=m, parse_mode='HTML', reply_markup=get_ikb_info(id, r.is_active))
     await ProfileStatesGroup.show_raffle.set()
-#
-#
-# @dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='run_')
-# async def run_raffle(callback: types.CallbackQuery):
-#     await callback.message.edit_reply_markup()
-#     id = callback.data.split('_')[-1]
-#     with db:
-#         r = db.get_raffles(id)
-#     # Выставляем флаг isActiv
-#     await bot.send_message(chat_id=callback.from_user.id, text='<b>Ваш розыгрыш запущен!</b>', parse_mode='HTML')
-#
-#
-#
-# @dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='Name_')
-# async def edit_name_raffle(callback: types.CallbackQuery):
-#     await callback.message.edit_reply_markup()
-#     id = callback.data.split('_')[-1]
-#     with db:
-#         r = db.get_raffles(id)
-#     await bot.send_message(chat_id=callback.from_user.id, text='"<b>Введите новое название розыгрыша.</b>?', parse_mode='HTML')
 
-# #
-# # @dp.callback_query_handler(state=ProfileStatesGroup.show_raffle, text_startswith='Discription_')
-# # async def edit_discription_raffle(callback: types.CallbackQuery):
-# #     await callback.message.edit_reply_markup()
-# #     id = callback.data.split('_')[-1]
-# #     with db:
-# #         r = db.get_raffles(id)
-# #     await bot.send_message(chat_id=callback.from_user.id, text='"<b>Введите новое описание розыгрыша.</b>?', parse_mode='HTML')
-# #     await ProfileStatesGroup.description_raffle.set()
-#
-#
+
+async def show_raffles(chat_id):
+    header = 'Список созданных Вами розыгрышей:\n'
+    s = ''
+    show_keyboard = InlineKeyboardMarkup(row_width=2)
+    with db:
+        for r in db.get_raffles():
+            if r.finish_date <= datetime.now():
+                status = 'Завершен'
+            elif r.is_active:
+                status = 'Запущен'
+            else:
+                status = 'Не запущен'
+            m = f'\n<b>{r.name}</b>\n' \
+                f'<b>Количество участников:</b> {r.users_count}\n' \
+                f'<b>Дата окончания:</b> {r.finish_date}\n' \
+                f'<b>Статус</b>: {status}\n'
+            show_keyboard.add(InlineKeyboardButton(f'{r.name}', callback_data=f'show_raffle_{r.id}'))
+            s += m
+    await bot.send_message(text= header + s, chat_id=chat_id, parse_mode='HTML', reply_markup=show_keyboard)
+
+
 # # @dp.message_handler(lambda message: not message.text.isdigit() or float(message.text) > 100, state=ProfileStatesGroup.age)
 # # async def check_age(message: types.Message):
 # #     await message.reply('Введите реальный возраст!')
 #
 
 # Создание розыгрыша
-
-
 @dp.message_handler(commands=['create_raffle'], state='*')
 @dp.message_handler(text=['Создать розыгрыш'], state='*')
 async def cmd_create_raffle(message: types.Message) -> None:
@@ -238,7 +334,7 @@ async def load_media(message: types.Message, state: FSMContext) -> None:
     await ProfileStatesGroup.finish_date.set()
 
 
-def string_to_timestamp(value):
+def string_to_timestamp(value) -> datetime|None:
     try:
         if not value.strip():
             return None
