@@ -1,5 +1,8 @@
+from aiogram.utils import executor
 
-from database import Database, Raffle, User
+from config import TOKEN_API
+from database import User, Raffle, Database, Channel
+from fsm_dialogs import bot, dp
 
 database = Database()
 r=Raffle(
@@ -17,6 +20,13 @@ u=User(
     telegram_id=23423
 )
 
+c=Channel(
+    telegram_id=23423
+)
+
 with database as db:
-   db.delete_raffle(14)
+   db.delete_channel(23423)
+   print(db.get_channels())
+
+
 

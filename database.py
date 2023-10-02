@@ -37,6 +37,14 @@ class User(Base):
     def __str__(self):
         return self.ticket_number
 
+class Channel(Base):
+    __tablename__ = 'channel'
+
+    telegram_id = Column(BigInteger)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    def __str__(self):
+        return self.telegram_id
 
 class Database:
     def __init__(self):
@@ -68,6 +76,14 @@ class Database:
             logging.exception('There was an exception in save_raffle')
             self.session.rollback()
 
+    def save_channel(self, channel: Channel):
+        try:
+            self.session.add(channel)
+            self.session.commit()
+        except Exception as ex:
+            logging.exception('There was an exception in save_channel')
+            self.session.rollback()
+
     def update_raffle(self, raffle: Raffle):
         try:
             saved = self.session.query(Raffle).filter(Raffle.id == raffle.id).first()
@@ -93,6 +109,15 @@ class Database:
             logging.exception('There was an exception in delete_raffle')
             self.session.rollback()
 
+    def delete_channel(self, telegram_id: int):
+        try:
+            s = self.session.query(Channel).filter_by(telegram_id=telegram_id).one()
+            self.session.delete(s)
+            self.session.commit()
+        except Exception as ex:
+            logging.exception('There was an exception in delete_channel')
+            self.session.rollback()
+
     def get_raffles(self, raffle_id=None):
         if not raffle_id:
             try:
@@ -106,3 +131,10 @@ class Database:
             except Exception as ex:
                 logging.exception('There was an exception in get_raffles')
                 self.session.rollback()
+
+    def get_channels(self):
+        try:
+            return self.session.query(Channel).all()
+        except Exception as ex:
+            logging.exception('There was an exception in get_channel')
+            self.session.rollback()
