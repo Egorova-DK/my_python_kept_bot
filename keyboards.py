@@ -41,6 +41,7 @@ def get_ikb_edit(id) -> InlineKeyboardMarkup:
         [InlineKeyboardButton('Название', callback_data=f'Name_{id}')],
         [InlineKeyboardButton('Описание', callback_data=f'Discription_{id}')],
         [InlineKeyboardButton('Дата розыгрыша', callback_data=f'Finish_date_{id}')],
+        [InlineKeyboardButton('Место подарка', callback_data=f'Place_{id}')],
         [InlineKeyboardButton('Назад', callback_data=f'show_raffle_{id}')],
         ])
     return ikb
@@ -51,8 +52,6 @@ def complete_raffles() -> InlineKeyboardMarkup:
         [InlineKeyboardButton('Все розыгрыши', callback_data='raffles')],
         ])
     return ikb
-
-
 
 
 

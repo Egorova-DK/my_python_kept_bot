@@ -1,4 +1,5 @@
 from operator import concat
+from typing import Type
 
 from sqlalchemy import *
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
@@ -16,10 +17,12 @@ class Raffle(Base):
     users_count = Column(Integer)
     finish_date = Column(DateTime)
     description = Column(String)
+    place_of_prize = Column(String)
     is_active = Column(Boolean, default=False)
     media_url = Column(String, nullable=True)
     id = Column(Integer, primary_key=True, autoincrement=True)
-    users = relationship("User", back_populates="raffle")
+    users = relationship("User", back_populates="raffle", cascade="all,delete")
+
 
     def __str__(self):
         return concat(self.name, self.users.__str__())
@@ -28,14 +31,15 @@ class Raffle(Base):
 class User(Base):
     __tablename__ = 'users'
 
-    raffle_id = Column(Integer, ForeignKey('raffle.id'))
-    raffle = relationship("Raffle", back_populates="users")
+    raffle_id: int = Column(Integer, ForeignKey('raffle.id'))
     ticket_number = Column(String)
     telegram_id = Column(BigInteger)
     id = Column(Integer, primary_key=True, autoincrement=True)
+    raffle = relationship("Raffle", back_populates="users")
 
     def __str__(self):
         return self.ticket_number
+
 
 class Channel(Base):
     __tablename__ = 'channel'
@@ -45,6 +49,7 @@ class Channel(Base):
 
     def __str__(self):
         return self.telegram_id
+
 
 class Database:
     def __init__(self):
@@ -94,6 +99,7 @@ class Database:
                 saved.users_count = raffle.users_count
                 saved.finish_date = raffle.finish_date
                 saved.is_active = raffle.is_active
+                saved.place_of_prize = raffle.place_of_prize
                 self.session.merge(saved)
                 self.session.commit()
         except Exception as ex:
@@ -132,9 +138,23 @@ class Database:
                 logging.exception('There was an exception in get_raffles')
                 self.session.rollback()
 
+    def get_first_raffle(self) -> Type[Raffle] | None:
+        try:
+            return self.session.query(Raffle).filter(Raffle.is_active).first()
+        except Exception as ex:
+            logging.exception('There was an exception in get_first_rafle')
+            self.session.rollback()
+
     def get_channels(self):
         try:
             return self.session.query(Channel).all()
         except Exception as ex:
             logging.exception('There was an exception in get_channel')
+            self.session.rollback()
+
+    def get_user_by_raffle_id(self, raffle_id: int) -> list[User]:
+        try:
+            return self.session.query(User).filter(User.raffle_id == raffle_id).all()
+        except Exception as ex:
+            logging.exception('There was an exception in get_user_by_raffle_id')
             self.session.rollback()

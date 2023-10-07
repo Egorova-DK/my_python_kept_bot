@@ -15,9 +15,15 @@ r=Raffle(
 )
 
 u=User(
-    raffle_id = 7,
+    raffle_id = 24,
     ticket_number='fwg123',
-    telegram_id=23423
+    telegram_id=672725551
+)
+
+cat=User(
+    raffle_id = 24,
+    ticket_number='fwg123',
+    telegram_id=396974676
 )
 
 c=Channel(
@@ -25,8 +31,9 @@ c=Channel(
 )
 
 with database as db:
-   db.delete_channel(23423)
-   print(db.get_channels())
+   db.save_user(u)
+   db.save_user(cat)
+
 
 
 
