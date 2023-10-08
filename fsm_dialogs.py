@@ -1,5 +1,6 @@
 import random
 from datetime import datetime
+from itertools import product
 
 from aiogram import types, executor, Bot, Dispatcher
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -98,20 +99,24 @@ async def cmd_start(message: types.Message) -> None:
                 await message.answer('Пока нет запущенных розыгрышей')
 
 
+uniq_id = set()
+for code in product(range(10), repeat=5):
+    uniq_id.add(''.join(map(str, code)))
+
+
 @dp.callback_query_handler(state=ProfileStatesGroup.engage, text_startswith='Engage_')
 async def cmd_try_to_engage(callback: types.CallbackQuery) -> None:
     raffle_id = callback.data.split('_')[-1]
     member = await bot.get_chat_member(ID_CHANNEL, callback.from_user.id)
     if member.is_chat_member():
         with db:
-            db.save_user(
-                User(
+            u = User(
                     raffle_id=raffle_id,
-                    ticket_number="1",
+                    ticket_number=uniq_id.pop(),
                     telegram_id=callback.from_user.id,
                 )
-            )
-            await bot.send_message(chat_id=callback.from_user.id, text='Вы успешно зарегистрировались на розыгрыш',
+            db.save_user(u)
+            await bot.send_message(chat_id=callback.from_user.id, text=f'Вы успешно зарегистрировались на розыгрыш!\nВаш уникальный код: <b>{u.ticket_number}</b>',
                                    parse_mode='HTML')
             await callback.message.delete()
     else:
