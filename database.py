@@ -23,7 +23,6 @@ class Raffle(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     users = relationship("User", back_populates="raffle", cascade="all,delete")
 
-
     def __str__(self):
         return concat(self.name, self.users.__str__())
 

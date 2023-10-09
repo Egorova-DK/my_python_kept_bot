@@ -73,7 +73,7 @@ async def cmd_start(message: types.Message) -> None:
                              'Бот умеет проводить розыгрыши от компании Kept среди студентов ВУЗов Санкт-Петербурга и '
                              'самостоятельно выбирать победителей! '
                              '\n\n<b>Команды бота:</b> \n/create_raffle - создание розыгрыша \n/raffles - просмотр '
-                             'розыгрышей',
+                             'розыгрышей и работа с ними',
                              parse_mode="HTML",
                              reply_markup=get_kb_menu())
         await ProfileStatesGroup.menu.set()
@@ -156,7 +156,7 @@ async def menu_to_handler(callback: types.CallbackQuery):
                            'Бот умеет проводить розыгрыши от компании Kept среди студентов ВУЗов Санкт-Петербурга и '
                            'самостоятельно выбирать победителей!'
                            '\n\n<b>Команды бота:</b> \n/create_raffle - создание розыгрыша \n/raffles - просмотр '
-                           'розыгрышей',
+                           'розыгрышей и работа с ними',
                            parse_mode="HTML",
                            reply_markup=get_kb_menu())
     await ProfileStatesGroup.menu.set()
@@ -177,7 +177,7 @@ async def cmd_show_raffles(message: types.Message) -> None:
 async def edit_raffle(callback: types.CallbackQuery):
     await callback.message.edit_reply_markup()
     id = callback.data.split('_')[-1]
-    await bot.send_message(chat_id=callback.from_user.id, text='Что бы Вы хотели изменить?🤔', parse_mode='HTML',
+    await bot.send_message(chat_id=callback.from_user.id, text='Что бы Вы хотели изменить? 🤔', parse_mode='HTML',
                            reply_markup=get_ikb_edit(id))
 
 
@@ -221,7 +221,7 @@ async def run_raffle(callback: types.CallbackQuery):
             global sched
             sched.remove_all_jobs()
             sched.add_job(finish_raffle, kwargs={'raffle_id': r.id}, trigger='date', next_run_time=r.finish_date)
-            await bot.send_message(chat_id=callback.from_user.id, text='<b>Ваш розыгрыш успешно запущен!👏</b>',
+            await bot.send_message(chat_id=callback.from_user.id, text='<b>Ваш розыгрыш успешно запущен! 👏</b>',
                                    parse_mode='HTML')
         await show_raffle_id(id, chat_id=callback.from_user.id)
 
@@ -500,7 +500,7 @@ async def cmd_create_raffle(message: types.Message) -> None:
         await message.answer(text='Сейчас мы создадим розыгрыш 😌', reply_markup=types.ReplyKeyboardRemove())
         await message.answer(
             "<b>Введите название розыгрыша</b>\n"
-            "Это название будет отображаться у пользователя в списке розыгрышей в боте.",
+            "Это название будет отображаться у участника в списке розыгрышей в боте.",
             parse_mode="HTML", reply_markup=get_ikb_menu())
         await ProfileStatesGroup.name.set()
 
@@ -516,8 +516,8 @@ async def load_name(message: types.Message, state: FSMContext) -> None:
         async with state.proxy() as data:
             data['name'] = message.text
         await message.answer(
-            '<b>Введите текст подробного описания розыгрыша.</b>\nПодробно опишите условия розыгрыша для Ваших '
-            'подписчиков',
+            '<b>Введите текст подробного описания розыгрыша.</b>\n'
+            'Введенный текст будет отображаться у участника в списке розыгрышей в боте.',
             parse_mode="HTML", reply_markup=get_ikb_menu())
         await ProfileStatesGroup.description_raffle.set()
 
@@ -623,8 +623,10 @@ async def load_finish_date(message: types.Message, state: FSMContext) -> None:
             )
             with db:
                 db.save_raffle(r)
-            await message.answer('Вы успешно создали розыгрыш!', reply_markup=get_kb_menu())
-            await ProfileStatesGroup.end.set()
+                id = r.id
+            await message.answer('Вы успешно создали розыгрыш! 👏', reply_markup=get_kb_menu())
+            await show_raffle_id(id, message.from_user.id)
+            await ProfileStatesGroup.show_raffle.set()
 
 
 if __name__ == '__main__':
