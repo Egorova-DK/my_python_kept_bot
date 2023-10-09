@@ -14,7 +14,7 @@ class Raffle(Base):
     __tablename__ = 'raffle'
 
     name = Column(String)
-    users_count = Column(Integer)
+    users_count = Column(Integer, default=10000)
     finish_date = Column(DateTime)
     description = Column(String)
     place_of_prize = Column(String)
